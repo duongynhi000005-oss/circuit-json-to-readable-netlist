@@ -9,6 +9,25 @@ import { getFullConnectivityMapFromCircuitJson } from "circuit-json-to-connectiv
 import { generateNetName } from "./generateNetName"
 import { getReadableNameForPin } from "./getReadableNameForPin"
 
+const isGenericPinLabel = (label: string | undefined, pinNumber?: number) => {
+  if (!label) return true
+  if (pinNumber !== undefined && label.toLowerCase() === `pin${pinNumber}`) return true
+  return /^pin\d+$/i.test(label)
+}
+
+const getPrimaryPinLabel = (port: {
+  name?: string
+  pin_number?: number
+  port_hints?: string[]
+}) => {
+  const hintedLabel = port.port_hints?.find(
+    (hint) => !isGenericPinLabel(hint, port.pin_number),
+  )
+  if (port.name && !isGenericPinLabel(port.name, port.pin_number)) return port.name
+  if (hintedLabel) return hintedLabel
+  return port.pin_number !== undefined ? `pin${port.pin_number}` : port.name ?? ""
+}
+
 export const convertCircuitJsonToReadableNetlist = (
   circuitJson: AnyCircuitElement[],
 ): string => {
@@ -156,9 +175,11 @@ export const convertCircuitJsonToReadableNetlist = (
         .filter((p) => p.source_component_id === component.source_component_id)
         .sort((a, b) => (a.pin_number ?? 0) - (b.pin_number ?? 0))
       for (const port of ports) {
-        const mainPin =
-          port.pin_number !== undefined ? `pin${port.pin_number}` : port.name
+        const mainPin = getPrimaryPinLabel(port)
         const aliases: string[] = []
+        if (port.pin_number !== undefined && mainPin !== `pin${port.pin_number}`) {
+          aliases.push(`pin${port.pin_number}`)
+        }
         if (port.name && port.name !== mainPin) aliases.push(port.name)
         for (const hint of port.port_hints ?? []) {
           if (hint === String(port.pin_number)) continue
